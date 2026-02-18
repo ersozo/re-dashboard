@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  @apply bg-gray-50 text-gray-900;
+}
+
+.dark body,
+body:where(.dark *) {
+  /* handled by Tailwind dark: utilities */
+}
+
+#root {
+  width: 100%;
+}
+
+/* Smooth theme transition */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 200ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Override for animations that shouldn't be slowed by theme transition */
+.animate-spin,
+.animate-pulse {
+  transition: none;
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Dark mode datetime-local inputs */
+.dark input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* Flash animation for live data updates */
+@keyframes flash-update {
+  0% { background-color: rgba(59, 130, 246, 0.5); }
+  100% { background-color: transparent; }
+}
+.animate-flash-update {
+  animation: flash-update 1s ease-out;
+}
+
+/* Green flash variant for hourly signage */
+@keyframes flash-update-green {
+  0% { background-color: rgba(34, 197, 94, 0.5); }
+  100% { background-color: transparent; }
+}
+.animate-flash-green {
+  animation: flash-update-green 0.8s ease-out;
+}
