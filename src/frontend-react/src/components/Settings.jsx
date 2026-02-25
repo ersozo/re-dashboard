@@ -140,18 +140,34 @@ const Settings = () => {
   const selectAllUnits = () => setSelectedUnits([...allGridUnits])
   const deselectAllUnits = () => setSelectedUnits([])
 
-  const handleNavigate = (viewType, isLive) => {
+  const isHistorical = () => {
+    if (!startTime) return false
+    const start = new Date(startTime)
+    if (isNaN(start.getTime())) return false
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const startDate = new Date(start)
+    startDate.setHours(0, 0, 0, 0)
+
+    return startDate < today
+  }
+
+  const handleNavigate = (viewType) => {
     if (selectedUnits.length === 0) {
       alert('Lütfen en az bir üretim yerini seçiniz')
       return
     }
+
+    const live = !isHistorical()
 
     const params = new URLSearchParams()
     selectedUnits.forEach(u => params.append('units', u))
     params.set('start', new Date(startTime).toISOString())
     params.set('end', new Date(endTime).toISOString())
     params.set('workingMode', workingMode)
-    params.set('isLive', isLive)
+    params.set('isLive', live)
 
     window.open(`/${viewType}?${params.toString()}`, '_blank')
   }
@@ -267,7 +283,7 @@ const Settings = () => {
               <button
                 key={shift.id}
                 onClick={() => setSelectedShift(shift.id)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   selectedShift === shift.id
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
@@ -309,65 +325,55 @@ const Settings = () => {
 
         {/* Action Buttons */}
         <div className="p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-            {/* Historical Section */}
-            <div>
-              <div className="flex items-center text-gray-400 dark:text-gray-500 mb-6 pb-2 border-b border-gray-100 dark:border-slate-700">
-                <Calendar size={18} className="mr-2" />
-                <span className="text-sm font-bold uppercase tracking-widest">Geçmiş Veri</span>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                <ActionButton
-                  onClick={() => handleNavigate('hourly', false)}
-                  icon={<BarChart size={18} />}
-                  label="Ekrana Yansıt"
-                  color="blue"
-                  variant="outline"
-                />
-                <ActionButton
-                  onClick={() => handleNavigate('dashboard', false)}
-                  icon={<Layout size={18} />}
-                  label="Model Dağılımı"
-                  color="green"
-                  variant="outline"
-                />
-                <ActionButton
-                  onClick={() => handleNavigate('report', false)}
-                  icon={<FileText size={18} />}
-                  label="Rapor"
-                  color="purple"
-                  variant="outline"
-                />
-              </div>
+          <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-100 dark:border-slate-700">
+            <div className="flex items-center">
+              {!isHistorical() ? (
+                <div className="flex items-center">
+                  <div className="relative mr-4 flex items-center justify-center">
+                    <div className="h-4 w-4 rounded-full bg-green-500 animate-pulse relative z-10"></div>
+                    <div className="absolute h-8 w-8 rounded-full bg-green-400/20 animate-ping"></div>
+                  </div>
+                  <div>
+                    <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400">Görüntüle</span>
+                    <p className="text-[10px] font-black text-green-600 dark:text-green-400 uppercase tracking-[0.2em] mt-0.5">CANLI İZLEME AKTİF</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg mr-4 text-blue-600 dark:text-blue-400">
+                    <Calendar size={20} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <span className="text-xl font-bold text-gray-800 dark:text-gray-100">Görüntüle</span>
+                    <p className="text-[10px] font-black text-blue-600/60 dark:text-blue-400/60 uppercase tracking-[0.2em] mt-0.5">GEÇMİŞ VERİ ANALİZİ</p>
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
 
-            {/* Live Section */}
-            <div>
-              <div className="flex items-center text-green-600 dark:text-green-400 mb-6 pb-2 border-b border-gray-100 dark:border-slate-700">
-                <div className="h-2 w-2 rounded-full bg-green-500 mr-3 animate-pulse"></div>
-                <span className="text-sm font-bold uppercase tracking-widest">Canlı Veri</span>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                <ActionButton
-                  onClick={() => handleNavigate('hourly', true)}
-                  icon={<BarChart size={18} />}
-                  label="Ekrana Yansıt"
-                  color="blue"
-                />
-                <ActionButton
-                  onClick={() => handleNavigate('dashboard', true)}
-                  icon={<Layout size={18} />}
-                  label="Model Dağılımı"
-                  color="green"
-                />
-                <ActionButton
-                  onClick={() => handleNavigate('report', true)}
-                  icon={<FileText size={18} />}
-                  label="Rapor"
-                  color="purple"
-                />
-              </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <ActionButton
+              onClick={() => handleNavigate('hourly')}
+              icon={<BarChart size={18} />}
+              label="Ekrana Yansıt"
+              color="blue"
+              isHistorical={isHistorical()}
+            />
+            <ActionButton
+              onClick={() => handleNavigate('dashboard')}
+              icon={<Layout size={18} />}
+              label="Model Dağılımı"
+              color="green"
+              isHistorical={isHistorical()}
+            />
+            <ActionButton
+              onClick={() => handleNavigate('report')}
+              icon={<FileText size={18} />}
+              label="Rapor"
+              color="purple"
+              isHistorical={isHistorical()}
+            />
           </div>
         </div>
       </div>
@@ -375,31 +381,33 @@ const Settings = () => {
   )
 }
 
-const ActionButton = ({ onClick, icon, label, color, variant = 'solid' }) => {
+const ActionButton = ({ onClick, icon, label, color, isHistorical }) => {
   const colors = {
-    blue: variant === 'solid'
-      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-      : 'border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20',
-    green: variant === 'solid'
-      ? 'bg-green-600 hover:bg-green-700 text-white'
-      : 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20',
-    purple: variant === 'solid'
-      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-      : 'border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20',
+    blue: isHistorical
+      ? 'border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20',
+    green: isHistorical
+      ? 'border-green-200 dark:border-green-800/50 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
+      : 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20',
+    purple: isHistorical
+      ? 'border-purple-200 dark:border-purple-800/50 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+      : 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/20',
   }
 
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between p-4 rounded-xl font-semibold transition-all group ${
-        variant === 'outline' ? 'border-2' : ''
+      className={`w-full flex items-center justify-between p-5 rounded-2xl font-bold transition-all duration-300 group ${
+        isHistorical ? 'border-2' : ''
       } ${colors[color]}`}
     >
       <div className="flex items-center">
-        <span className="mr-3 group-hover:scale-110 transition-transform">{icon}</span>
-        {label}
+        <span className={`mr-4 p-2.5 rounded-xl ${isHistorical ? 'bg-white dark:bg-slate-800 shadow-sm' : 'bg-white/20'} transition-all group-hover:scale-110 group-hover:rotate-3`}>
+          {React.cloneElement(icon, { size: 20 })}
+        </span>
+        <span className="text-base tracking-tight">{label}</span>
       </div>
-      <ChevronRight size={18} className="opacity-50 group-hover:translate-x-1 transition-transform" />
+      <ChevronRight size={18} className={`${isHistorical ? 'text-gray-300' : 'text-white/50'} group-hover:translate-x-1 transition-transform`} />
     </button>
   )
 }
