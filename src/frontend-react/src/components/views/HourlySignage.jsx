@@ -74,11 +74,11 @@ const HourlySignage = () => {
         {/* Header: live clock or static title for historical */}
         <div className="text-center my-2">
           {isLive ? (
-            <h2 ref={clockRef} className="text-9xl font-bold text-white">
+            <h2 ref={clockRef} className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold text-white">
               {clock}
             </h2>
           ) : (
-            <h2 className="text-7xl xl:text-7xl font-bold text-white">
+            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white uppercase">
               SAATLİK ÜRETİM SAYILARI
             </h2>
           )}
@@ -155,19 +155,19 @@ const UnitSignageCard = ({ unitData, currentTime, flashing, dataVersion }) => {
             <tr>
               {/* Production total */}
               <td className="p-0 w-1/2">
-                <div className="text-white text-5xl xl:text-7xl font-bold text-center p-2 bg-red-900 rounded-tl-lg">
+                <div className="text-white text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-7xl font-bold text-center p-2 bg-red-900 rounded-tl-lg truncate">
                   {shortName} ÜRETİM
                 </div>
-                <div key={`prod-${dataVersion}`} className={`text-7xl xl:text-9xl font-bold text-center p-2 bg-yellow-200 ${flashClass}`}>
+                <div key={`prod-${dataVersion}`} className={`text-4xl sm:text-5xl md:text-6xl lg:text-8xl xl:text-9xl font-bold text-center p-2 bg-yellow-200 ${flashClass}`}>
                   {(total_success || 0).toLocaleString()}
                 </div>
               </td>
               {/* Target total */}
               <td className="p-0 w-1/2">
-                <div className="text-white text-5xl xl:text-7xl font-bold text-center p-2 bg-red-900 rounded-tr-lg">
+                <div className="text-white text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-7xl font-bold text-center p-2 bg-red-900 rounded-tr-lg">
                   HEDEF
                 </div>
-                <div key={`target-${dataVersion}`} className={`text-7xl xl:text-9xl font-bold text-center p-2 bg-green-200 ${flashClass}`}>
+                <div key={`target-${dataVersion}`} className={`text-4xl sm:text-5xl md:text-6xl lg:text-8xl xl:text-9xl font-bold text-center p-2 bg-green-200 ${flashClass}`}>
                   {targetDisplay}
                 </div>
               </td>
@@ -177,13 +177,13 @@ const UnitSignageCard = ({ unitData, currentTime, flashing, dataVersion }) => {
       </div>
 
       {/* Hourly table */}
-      <table className="w-full divide-y divide-gray-200" style={{ tableLayout: 'fixed' }}>
+      <table className="w-full divide-y divide-gray-200">
         <thead className="bg-gray-300">
           <tr>
-            <th className="px-2 py-2 text-center font-bold text-black text-3xl xl:text-5xl tracking-wider">Saat</th>
-            <th className="px-2 py-2 text-center font-bold text-black text-3xl xl:text-5xl tracking-wider">Üretim</th>
-            <th className="px-2 py-2 text-center font-bold text-black text-3xl xl:text-5xl tracking-wider">Tamir</th>
-            <th className="px-2 py-2 text-center font-bold text-black text-3xl xl:text-5xl tracking-wider">Hedef</th>
+            <th className="px-1 py-2 text-center font-bold text-black text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-5xl tracking-wider w-[35%]">Saat</th>
+            <th className="px-1 py-2 text-center font-bold text-black text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-5xl tracking-wider w-[22%]">Üretim</th>
+            <th className="px-1 py-2 text-center font-bold text-black text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-5xl tracking-wider w-[21%]">Tamir</th>
+            <th className="px-1 py-2 text-center font-bold text-black text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-5xl tracking-wider w-[22%]">Hedef</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -218,21 +218,23 @@ const UnitSignageCard = ({ unitData, currentTime, flashing, dataVersion }) => {
                         : 'bg-gray-100'
                   }
                 >
-                  <td className="px-2 py-2 text-center font-bold text-black text-xl xl:text-2xl">
-                    {hourLabel}
-                    {isCurrent && (
-                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
-                        Aktif
-                      </span>
-                    )}
+                  <td className="px-1 py-2 text-center font-bold text-black text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl">
+                    <div className="flex flex-col items-center">
+                      <span>{hourLabel}</span>
+                      {isCurrent && (
+                        <span className="mt-1 px-2 py-0.5 bg-green-100 text-green-800 text-[10px] sm:text-xs rounded-full animate-pulse">
+                          Aktif
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-2 py-2 text-center text-black font-bold text-4xl xl:text-7xl">
+                  <td className="px-1 py-2 text-center text-black font-bold text-2xl sm:text-3xl md:text-4xl lg:text-6xl xl:text-7xl">
                     {(hour.success_qty || 0).toLocaleString()}
                   </td>
-                  <td className="px-2 py-2 text-center text-red-900 font-bold text-4xl xl:text-7xl">
+                  <td className="px-1 py-2 text-center text-red-900 font-bold text-2xl sm:text-3xl md:text-4xl lg:text-6xl xl:text-7xl">
                     {(hour.fail_qty || 0).toLocaleString()}
                   </td>
-                  <td className="px-2 py-2 text-center text-black font-bold text-4xl xl:text-7xl">
+                  <td className="px-1 py-2 text-center text-black font-bold text-2xl sm:text-3xl md:text-4xl lg:text-6xl xl:text-7xl">
                     {theoretical}
                   </td>
                 </tr>
