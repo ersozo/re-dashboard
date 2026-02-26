@@ -44,7 +44,7 @@ const useDashboardData = (viewType) => {
     try {
       if (viewType === 'report') {
         const response = await fetch(
-          `/report-data?units=${encodeURIComponent(units.join(','))}&start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}&working_mode=${encodeURIComponent(workingMode)}`
+          `/report-data?units=${encodeURIComponent(units.join(','))}&start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}&working_mode=${encodeURIComponent(workingMode)}&is_live=${isLive}`
         )
         const result = await response.json()
         setData(result)

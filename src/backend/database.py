@@ -36,43 +36,43 @@ def calculate_break_time(start_time, end_time, working_mode='mode1'):
     """
     if working_mode not in WORKING_MODE_BREAKS:
         working_mode = 'mode1'
-    
+
     applicable_breaks = WORKING_MODE_BREAKS[working_mode]
     total_break_seconds = 0
-    
+
     if start_time.tzinfo != TIMEZONE:
         start_time = start_time.astimezone(TIMEZONE)
     if end_time.tzinfo != TIMEZONE:
         end_time = end_time.astimezone(TIMEZONE)
-    
+
     for break_id in applicable_breaks:
         break_info = SHIFT_BREAKS[break_id]
-        
+
         break_start_time = datetime.strptime(break_info['start'], '%H:%M').time()
         break_end_time = datetime.strptime(break_info['end'], '%H:%M').time()
-        
+
         current_date = start_time.date()
         end_date = end_time.date()
-        
+
         while current_date <= end_date:
             break_start_dt = datetime.combine(current_date, break_start_time)
             break_end_dt = datetime.combine(current_date, break_end_time)
-            
+
             if break_start_time > break_end_time:
                 break_end_dt = break_end_dt + timedelta(days=1)
-            
+
             break_start_dt = TIMEZONE.localize(break_start_dt)
             break_end_dt = TIMEZONE.localize(break_end_dt)
-            
+
             overlap_start = max(start_time, break_start_dt)
             overlap_end = min(end_time, break_end_dt)
-            
+
             if overlap_start < overlap_end:
                 overlap_seconds = (overlap_end - overlap_start).total_seconds()
                 total_break_seconds += overlap_seconds
-            
+
             current_date += timedelta(days=1)
-    
+
     return total_break_seconds
 
 
@@ -125,101 +125,112 @@ async def get_production_units():
             return [row[0] for row in rows]
 
 
-async def get_production_data(unit_name, start_time, end_time, current_time=None, working_mode='mode1'):
-    actual_end_time = current_time if current_time else end_time
-    
-    # Ensure all datetimes use the same timezone (GMT+3)
+async def get_production_data(unit_name, start_time, end_time, current_time=None, is_live=False, working_mode='mode1'):
+    # Ensure current_time is localized
+    if current_time and current_time.tzinfo is None:
+        current_time = TIMEZONE.localize(current_time)
+    elif current_time and current_time.tzinfo != TIMEZONE:
+        current_time = current_time.astimezone(TIMEZONE)
+
+    # Ensure start_time is localized
     if start_time.tzinfo is None:
         start_time = TIMEZONE.localize(start_time)
     elif start_time.tzinfo != TIMEZONE:
         start_time = start_time.astimezone(TIMEZONE)
-        
-    if actual_end_time.tzinfo is None:
-        actual_end_time = TIMEZONE.localize(actual_end_time)
-    elif actual_end_time.tzinfo != TIMEZONE:
-        actual_end_time = actual_end_time.astimezone(TIMEZONE)
-    
+
+    # Ensure end_time is localized
+    if end_time.tzinfo is None:
+        end_time = TIMEZONE.localize(end_time)
+    elif end_time.tzinfo != TIMEZONE:
+        end_time = end_time.astimezone(TIMEZONE)
+
+    # Determine the query boundary
+    # If is_live is True, we always query up to current_time (now)
+    # to support sliding windows. Otherwise, we use the specified end_time.
+    if is_live and current_time:
+        final_query_end_time = current_time
+        actual_end_time = current_time
+    else:
+        # Respect the query_end_time if it's in the future,
+        # otherwise use historical logic
+        if current_time and end_time > current_time:
+            final_query_end_time = current_time
+            actual_end_time = current_time
+        else:
+            final_query_end_time = end_time
+            actual_end_time = end_time
+
     if actual_end_time < start_time:
         actual_end_time = start_time
-    
-    query_end_time = end_time
-    if query_end_time.tzinfo is None:
-        query_end_time = TIMEZONE.localize(query_end_time)
-    elif query_end_time.tzinfo != TIMEZONE:
-        query_end_time = query_end_time.astimezone(TIMEZONE)
-    
-    # Detect historical vs live data
-    final_query_end_time = query_end_time
-    
-    if current_time:
-        time_difference = current_time - query_end_time
-        five_minutes = timedelta(minutes=5)
-        
-        if time_difference <= five_minutes:
-            final_query_end_time = actual_end_time
-        else:
-            final_query_end_time = query_end_time
-            actual_end_time = query_end_time
-    
+
+    # Subtract a small safety buffer (2 seconds) to ensure that the
+    # production count and elapsed time are synchronized. This prevents
+    # OEE dips during transient database commit delays.
+    if is_live and final_query_end_time:
+        final_query_end_time = final_query_end_time - timedelta(seconds=2)
+        actual_end_time = final_query_end_time
+
     table_name = "ProductRecordLogView"
-    
+
     query = f"""
-    SELECT 
+    SELECT
         Model,
         SUM(CASE WHEN TestSonucu = 1 THEN 1 ELSE 0 END) as SuccessQty,
         SUM(CASE WHEN TestSonucu = 0 THEN 1 ELSE 0 END) as FailQty,
         ModelSuresiSN as Target
-    FROM 
+    FROM
         {table_name}
-    WHERE 
-        UnitName = ? 
+    WHERE
+        UnitName = ?
         AND KayitTarihi BETWEEN ? AND ?
-    GROUP BY 
+    GROUP BY
         Model, ModelSuresiSN
     """
-    
+
     async with _pool.acquire() as conn:
         async with conn.cursor() as cursor:
             await cursor.execute(query, (unit_name, start_time, final_query_end_time))
             all_rows = await cursor.fetchall()
-    
+
     # --- Business logic (pure computation, unchanged) ---
-    
+
     operation_time_total = (actual_end_time - start_time).total_seconds()
     break_time = calculate_break_time(start_time, actual_end_time, working_mode)
     operation_time = max(operation_time_total - break_time, 0)
     operation_time_hours = operation_time / 3600
-    
+
     results = []
     models_with_target = []
-    
+
     for row in all_rows:
+        success = row[1]
+        fail = row[2]
         model_data = {
             'model': row[0],
-            'success_qty': row[1],
-            'fail_qty': row[2],
+            'success_qty': success,
+            'fail_qty': fail,
             'target': row[3],
-            'total_qty': row[1],
-            'quality': row[1] / (row[1] + row[2]) if (row[1] + row[2]) > 0 else 0,
+            'total_qty': success,  # Reverted: User wants this to be success only
+            'quality': success / (success + fail) if (success + fail) > 0 else 0,
             'performance': None,
             'oee': None
         }
-        
+
         if row[3] is not None and row[3] > 0:
             individual_theoretical_qty = operation_time_hours * row[3]
             model_data['theoretical_qty'] = individual_theoretical_qty
             models_with_target.append(model_data)
         else:
             model_data['theoretical_qty'] = 0
-            
+
         results.append(model_data)
-    
+
     if models_with_target:
         for model_data in results:
             if model_data['target'] is not None and model_data['target'] > 0:
                 individual_theoretical_qty = operation_time_hours * model_data['target']
                 model_data['theoretical_qty'] = individual_theoretical_qty
-                
+
                 if individual_theoretical_qty > 0:
                     model_data['performance'] = model_data['total_qty'] / individual_theoretical_qty
                 else:
@@ -231,5 +242,5 @@ async def get_production_data(unit_name, start_time, end_time, current_time=None
         for model_data in results:
             if model_data['target'] is not None and model_data['target'] > 0:
                 model_data['performance'] = 0
-    
+
     return results

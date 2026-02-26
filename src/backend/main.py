@@ -156,7 +156,7 @@ async def get_units():
 
 
 @app.get("/report-data")
-async def get_report_data(units: str, start_time: str, end_time: str, working_mode: str = 'mode1'):
+async def get_report_data(units: str, start_time: str, end_time: str, working_mode: str = 'mode1', is_live: bool = False):
     """Aggregated report data for multiple units with weighted performance."""
     try:
         unit_list = [u.strip() for u in units.split(',') if u.strip()]
@@ -178,16 +178,16 @@ async def get_report_data(units: str, start_time: str, end_time: str, working_mo
             print(f"[REPORT] Starting async query for unit {unit_name}")
             try:
                 production_data = await asyncio.wait_for(
-                    get_production_data(unit_name, start_dt, end_dt, current_time, working_mode),
+                    get_production_data(unit_name, start_dt, end_dt, current_time, is_live, working_mode),
                     timeout=30.0,
                 )
                 print(f"[REPORT] Query completed for unit {unit_name}")
             except asyncio.TimeoutError:
-                print(f"[REPORT ERROR] Timeout for unit {unit_name} - skipping")
-                continue
+                print(f"[REPORT ERROR] Timeout for unit {unit_name}")
+                raise HTTPException(status_code=504, detail=f"Database timeout for unit {unit_name}")
             except Exception as db_error:
-                print(f"[REPORT ERROR] DB error for unit {unit_name}: {db_error} - skipping")
-                continue
+                print(f"[REPORT ERROR] DB error for unit {unit_name}: {db_error}")
+                raise HTTPException(status_code=500, detail=str(db_error))
 
             unit_success = sum(m['success_qty'] for m in production_data)
             unit_fail = sum(m['fail_qty'] for m in production_data)
@@ -248,7 +248,7 @@ async def get_historical_data(unit_name: str, start_time: str, end_time: str, wo
         print(f"[HISTORICAL] Starting async query for unit {unit_name}")
         try:
             production_data = await asyncio.wait_for(
-                get_production_data(unit_name, start_dt, end_dt, current_time, working_mode),
+                get_production_data(unit_name, start_dt, end_dt, current_time, False, working_mode),
                 timeout=30.0,
             )
             print(f"[HISTORICAL] Query completed for unit {unit_name}")
@@ -320,7 +320,7 @@ async def get_historical_hourly_data(unit_name: str, start_time: str, end_time: 
             print(f"[HISTORICAL HOURLY] Async query for {unit_name}, hour {current_hour.strftime('%H:%M')}")
             try:
                 hour_data = await asyncio.wait_for(
-                    get_production_data(unit_name, current_hour, hour_end, current_time, working_mode),
+                    get_production_data(unit_name, current_hour, hour_end, current_time, False, working_mode),
                     timeout=30.0,
                 )
             except asyncio.TimeoutError:
@@ -408,6 +408,10 @@ async def websocket_endpoint(websocket: WebSocket, unit_name: str):
         params = json.loads(raw)
         start_time, end_time, working_mode = _parse_ws_params(params)
 
+        last_success = 0
+        last_fail = 0
+        model_cache = {}
+        last_params = (start_time, end_time, working_mode)
         # 2. Server-driven push loop
         while True:
             current_time = datetime.now(TIMEZONE)
@@ -415,7 +419,7 @@ async def websocket_endpoint(websocket: WebSocket, unit_name: str):
             # --- Query DB (truly async, no executor) ---
             try:
                 production_data = await asyncio.wait_for(
-                    get_production_data(unit_name, start_time, end_time, current_time, working_mode),
+                    get_production_data(unit_name, start_time, end_time, current_time, True, working_mode),
                     timeout=30.0,
                 )
             except asyncio.TimeoutError:
@@ -431,18 +435,44 @@ async def websocket_endpoint(websocket: WebSocket, unit_name: str):
                 await asyncio.sleep(PUSH_INTERVAL)
                 continue
 
-            # --- Build response (same business logic) ---
-            for model in production_data:
-                if not model['target']:
-                    model['performance'] = None
-                    model['oee'] = None
+            # --- Build response (with model-level monotonicity guard) ---
+            if (start_time, end_time, working_mode) != last_params:
+                model_cache.clear()
+                last_params = (start_time, end_time, working_mode)
 
+            for m in production_data:
+                name = m.get('model', 'Unknown')
+                # Only update cache if we see more production or fail
+                if name not in model_cache:
+                    model_cache[name] = m
+                else:
+                    prev = model_cache[name]
+                    # We check both success and fail independently
+                    if m['success_qty'] > prev['success_qty'] or m['fail_qty'] > prev['fail_qty']:
+                        model_cache[name] = m
+                    else:
+                        # Ensure we don't 'regress' even if DB does
+                        m['success_qty'] = max(m['success_qty'], prev['success_qty'])
+                        m['fail_qty'] = max(m['fail_qty'], prev['fail_qty'])
+                        m['total_qty'] = m['success_qty'] # success only for production (per user rule)
+                        # Quality must be updated for the shielded model
+                        tot = m['success_qty'] + m['fail_qty']
+                        m['quality'] = m['success_qty'] / tot if tot > 0 else 0
+
+            # Recalculate totals from shielded model data
             total_success = sum(m['success_qty'] for m in production_data)
             total_fail = sum(m['fail_qty'] for m in production_data)
-            total_qty = sum(m['total_qty'] for m in production_data)
 
-            total_processed = total_success + total_fail
-            total_quality = total_success / total_processed if total_processed > 0 else 0
+            # Only allow counts to go up (or stay same) - global guard
+            total_success = max(total_success, last_success)
+            total_fail = max(total_fail, last_fail)
+
+            # Store for next iteration
+            last_success = total_success
+            last_fail = total_fail
+
+            total_qty = total_success
+            total_quality = total_success / (total_success + total_fail) if (total_success + total_fail) > 0 else 0
 
             models_with_target = [m for m in production_data if m['target'] and m['target'] > 0]
             total_performance = 0
@@ -525,6 +555,10 @@ async def hourly_websocket_endpoint(websocket: WebSocket, unit_name: str):
         params = json.loads(raw)
         start_time, end_time, working_mode = _parse_ws_params(params)
 
+        last_success = 0
+        last_fail = 0
+        hourly_cache = {}
+        last_params = (start_time, end_time, working_mode)
         # 2. Server-driven push loop
         while True:
             current_time = datetime.now(TIMEZONE)
@@ -532,7 +566,7 @@ async def hourly_websocket_endpoint(websocket: WebSocket, unit_name: str):
             # --- Query DB for full range totals ---
             try:
                 raw_data = await asyncio.wait_for(
-                    get_production_data(unit_name, start_time, end_time, current_time, working_mode),
+                    get_production_data(unit_name, start_time, end_time, current_time, True, working_mode),
                     timeout=30.0,
                 )
             except asyncio.TimeoutError:
@@ -548,10 +582,21 @@ async def hourly_websocket_endpoint(websocket: WebSocket, unit_name: str):
                 await asyncio.sleep(PUSH_INTERVAL)
                 continue
 
-            # --- Totals from raw data ---
-            total_success = sum(m['success_qty'] for m in raw_data)
-            total_fail = sum(m['fail_qty'] for m in raw_data)
-            total_qty = sum(m['total_qty'] for m in raw_data)
+            # --- Totals from raw data (with monotonicity guard) ---
+            if (start_time, end_time, working_mode) != last_params:
+                hourly_cache.clear()
+                last_params = (start_time, end_time, working_mode)
+
+            new_success = sum(m['success_qty'] for m in raw_data)
+            new_fail = sum(m['fail_qty'] for m in raw_data)
+
+            total_success = max(new_success, last_success)
+            total_fail = max(new_fail, last_fail)
+
+            last_success = total_success
+            last_fail = total_fail
+
+            total_qty = total_success
 
             total_processed = total_success + total_fail
             total_quality = total_success / total_processed if total_processed > 0 else 0
@@ -604,7 +649,7 @@ async def hourly_websocket_endpoint(websocket: WebSocket, unit_name: str):
                 # Async query per hour
                 try:
                     hour_data = await asyncio.wait_for(
-                        get_production_data(unit_name, current_hour, hour_end, current_time, working_mode),
+                        get_production_data(unit_name, current_hour, hour_end, current_time, True, working_mode),
                         timeout=30.0,
                     )
                 except (asyncio.TimeoutError, Exception):
@@ -637,7 +682,7 @@ async def hourly_websocket_endpoint(websocket: WebSocket, unit_name: str):
                         hour_theoretical_qty = (h_op_time / 3600) * h_rate
                         hour_performance = h_actual / hour_theoretical_qty if hour_theoretical_qty > 0 else 0
 
-                hourly_data.append({
+                hd_entry = {
                     'hour_start': current_hour.isoformat(),
                     'hour_end': hour_end.isoformat(),
                     'success_qty': hour_success,
@@ -647,7 +692,22 @@ async def hourly_websocket_endpoint(websocket: WebSocket, unit_name: str):
                     'performance': hour_performance,
                     'oee': 0,
                     'theoretical_qty': hour_theoretical_qty,
-                })
+                }
+
+                # Shield hourly data from drops
+                h_key = hd_entry['hour_start']
+                if h_key not in hourly_cache:
+                    hourly_cache[h_key] = hd_entry
+                else:
+                    prev_h = hourly_cache[h_key]
+                    if hd_entry['success_qty'] >= prev_h['success_qty'] and hd_entry['fail_qty'] >= prev_h['fail_qty']:
+                        hourly_cache[h_key] = hd_entry
+                    else:
+                        # Use previous counts if DB regressed
+                        hd_entry['success_qty'] = max(hd_entry['success_qty'], prev_h['success_qty'])
+                        hd_entry['fail_qty'] = max(hd_entry['fail_qty'], prev_h['fail_qty'])
+
+                hourly_data.append(hd_entry)
 
                 if is_live_data and hour_end == current_time:
                     current_hour = current_hour + timedelta(hours=1)

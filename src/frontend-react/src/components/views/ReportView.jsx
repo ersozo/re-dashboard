@@ -13,10 +13,16 @@ import { useTheme } from '../../hooks/useTheme'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
+
 const CHART_COLORS = [
-  '#3B82F6', '#EF4444', '#10B981', '#F59E0B',
-  '#8B5CF6', '#06B6D4', '#F97316', '#84CC16',
-  '#6366F1', '#EC4899', '#14B8A6', '#F59E0B',
+    "#60A5FA",  // muted blue
+    "#34D399",  // muted green
+    "#F59E0B",  // muted amber
+    "#A78BFA",  // muted violet
+    "#2DD4BF",  // muted teal
+    "#F87171",  // muted red (non-alert usage)
+    "#818CF8",  // muted indigo
+    "#94A3B8",  // cool gray-blue
 ]
 
 /**
@@ -230,6 +236,7 @@ const ReportView = ({ data, isLive, dataVersion }) => {
           metric="quality"
           modelMetric="quality"
           isPercent
+          capAt100
           modelLabel="Model Kalite (%)"
           isDark={isDark}
         />
@@ -269,6 +276,7 @@ const DrilldownChart = ({
   metric,
   modelMetric,
   isPercent,
+  capAt100,
   modelLabel,
   isDark,
 }) => {
@@ -346,8 +354,8 @@ const DrilldownChart = ({
     scales: {
       y: {
         beginAtZero: true,
-        ...(isPercent && !isInDrilldown ? { max: 100 } : {}),
-        ...(isPercent && isInDrilldown ? { max: 100 } : {}),
+        ...(isPercent && capAt100 ? { max: 100 } : {}),
+        suggestedMax: isPercent ? 100 : undefined,
         grid: { color: isDark ? '#334155' : '#f3f4f6' },
         ticks: {
           color: isDark ? '#94a3b8' : undefined,
