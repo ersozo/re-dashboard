@@ -334,7 +334,7 @@ const Settings = () => {
                     <div className="absolute h-8 w-8 rounded-full bg-green-400/20 animate-ping"></div>
                   </div>
                   <div>
-                    <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400">Görüntüle</span>
+                    <span className="text-lg font-semibold text-gray-700 dark:text-gray-200">Görüntüle</span>
                     <p className="text-[10px] font-black text-green-600 dark:text-green-400 uppercase tracking-[0.2em] mt-0.5">CANLI İZLEME AKTİF</p>
                   </div>
                 </div>
@@ -344,7 +344,7 @@ const Settings = () => {
                     <Calendar size={20} strokeWidth={2.5} />
                   </div>
                   <div>
-                    <span className="text-xl font-bold text-gray-800 dark:text-gray-100">Görüntüle</span>
+                    <span className="text-lg font-semibold  text-gray-700 dark:text-gray-200">Görüntüle</span>
                     <p className="text-[10px] font-black text-blue-600/60 dark:text-blue-400/60 uppercase tracking-[0.2em] mt-0.5">GEÇMİŞ VERİ ANALİZİ</p>
                   </div>
                 </div>
